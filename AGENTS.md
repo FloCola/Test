@@ -14,3 +14,12 @@ Token nur an dieses Repository binden. Vor grünem Probe Einrichtung nicht behau
 Technische Rechte ersetzen keine Projekt-/Sicherheits-/Produktionsfreigabe.
 Zentrale Einrichtung/Rotation: https://github.com/FloCola/Bibliotheken/issues/17
 
+## GitHub-native Arbeitsweise und Branch-Abschluss
+
+- GitHub-Funktionen direkt nutzen, sobald der Connector oder der geprüfte repo-eigene Zugang sie anbietet.
+- Idee/Architekturfrage → **Discussion**; angenommene Architekturentscheidung → **Decision/ADR-Discussion** mit Ownerbeleg.
+- Gap, Bug, Migration oder konkrete Umsetzung → **Issue**; Priorität, Status und Roadmap → **Project**.
+- Dauerhaftes Handbuch-/Runbookwissen → **Wiki**; Codeänderung/Abnahme → **Pull Request + Checks**; Veröffentlichung → **Release**.
+- Keine neuen aktiven `GAPS`-, `ROADMAP`-, `DISCUSSIONS`-, `STATUS`- oder `HANDOFF`-Dateien im Source, sofern es kein versionsgebundener Build-/API-/Formatvertrag ist.
+- **Jede Arbeit hat Issue, kurzlebigen Branch und PR; nach geprüftem Merge den unveränderten, ungeschützten Arbeitsbranch ohne offene Folge-PRs entfernen, sonst Owner und nächste Aktion im Issue festhalten.**
+
