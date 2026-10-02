@@ -29,3 +29,12 @@ Default-, Release-, Rescue-, Archiv- und Schutzbranches niemals allein aufgrund 
 
 Deployments ab Installation/Rollout, Remotezugriffe, VPN, SSH, RDP, Zugriffs-Keys/Secrets, Hostdokumentation, Runnerbetrieb/-registrierung und Live-Abfragen von Hosts/Diensten gehören ausschließlich nach `FloCola/Infrastruktur`. Produkt-/Library-Repos liefern Source/Build/Pakete/Releases; CI darf freigegebene Runnerlabels verwenden, verwaltet die Runner aber nicht. Für Betrieb/Zugriff auf Infrastruktur verweisen und keine parallelen Betriebsstrukturen aufbauen.
 
+## API-Key-Zugriff und Wiki
+
+- **Connector zuerst.** Native Connector-Funktion nicht durch eigenen HTTP-Code ersetzen.
+- Für zusätzliche Funktionen des eigenen Repositories den repo-eigenen `GH_REPO_TOKEN` und den vorhandenen lokalen Capability-/Adminweg verwenden. Nur tatsächlich geprüfte Endpoints als verfügbar behandeln.
+- Für Funktionen, die Connector und lokaler Repo-PAT-Weg nicht abdecken, ist `FloCola/Infrastruktur` der zentrale kontrollierte Bridge-Pfad. `GH_ADMIN_TOKEN` bleibt ausschließlich dort und wird niemals kopiert oder von einer KI angefordert.
+- Zentral live verifiziert: Fine-Grained-Key kann ein **initialisiertes privates Wiki** über Git HTTPS lesen, schreiben und zurücklesen (OpsWorkbench, Infrastruktur-Run 37037859389).
+- `WIKI_INITIALIZATION_REQUIRED`: Wiki ist aktiviert, besitzt aber noch keinen HEAD. Einmalig in GitHubs Weboberfläche eine `Home`-Seite anlegen; danach Fast-Forward + Readback verwenden.
+- `GH_REPO_ACC`/`GH_ADMIN_ACC` sind Diagnosewerte; maßgeblich ist die live vom Token gelesene GitHub-Identität.
+
