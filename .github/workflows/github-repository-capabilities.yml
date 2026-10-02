@@ -1,0 +1,44 @@
+name: Repository GitHub capability probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe repository-scoped Fine-Grained PAT
+        env:
+          GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
+          GH_REPO_ACC: ${{ secrets.GH_REPO_ACC }}
+          TARGET_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os, urllib.error, urllib.request
+          token=os.environ.get("GH_REPO_TOKEN",""); expected=os.environ.get("GH_REPO_ACC",""); target=os.environ["TARGET_REPOSITORY"]
+          if not token or not expected: print(json.dumps({"status":"TOKEN_NOT_CONFIGURED"})); raise SystemExit(1)
+          def call(method,url,payload=None):
+              data=None if payload is None else json.dumps(payload).encode()
+              req=urllib.request.Request(url,data=data,method=method,headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"FloCola-repository-capability/1","Content-Type":"application/json"})
+              try:
+                  with urllib.request.urlopen(req,timeout=20) as response:
+                      raw=response.read(1048577)
+                      if len(raw)>1048576: raise RuntimeError("RESPONSE_LIMIT")
+                      return response.status,json.loads(raw) if raw else None
+              except urllib.error.HTTPError as exc: return exc.code,None
+          code,user=call("GET","https://api.github.com/user")
+          if code!=200 or not user: print(json.dumps({"status":"TOKEN_AUTH_FAILED","http":code})); raise SystemExit(1)
+          if user.get("login","").casefold()!="flocola" or expected.casefold()!="flocola": print(json.dumps({"status":"ACCOUNT_MISMATCH"})); raise SystemExit(1)
+          code,repo=call("GET","https://api.github.com/repos/"+target)
+          if code!=200 or not repo: print(json.dumps({"status":"REPOSITORY_ACCESS_FAILED","http":code})); raise SystemExit(1)
+          if repo.get("full_name")!=target: print(json.dumps({"status":"REPOSITORY_BINDING_FAILED"})); raise SystemExit(1)
+          owner,name=target.split("/",1); q="""query($owner:String!,$name:String!){repository(owner:$owner,name:$name){hasDiscussionsEnabled viewerPermission}}"""
+          code,graph=call("POST","https://api.github.com/graphql",{"query":q,"variables":{"owner":owner,"name":name}})
+          discussions="UNKNOWN"
+          if code==200 and graph and not graph.get("errors"): discussions="PASS" if graph["data"]["repository"]["hasDiscussionsEnabled"] else "DISABLED"
+          p=repo.get("permissions") or {}
+          print(json.dumps({"status":"READY","repository":target,"identity":"FloCola","repository_permissions":{k:bool(p.get(k)) for k in ("admin","maintain","push","triage","pull")},"discussions":discussions,"destructive_write_probe":"NOT_RUN","wiki_write":"NOT_ASSUMED"},indent=2))
+          PY
