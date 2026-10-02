@@ -18,3 +18,10 @@ keine Benutzer-/Rechte-/Rulesetänderung, keine Secretrotation, keine Security-A
 Dismissals, keine Deployments/Produktionsänderung, keine kostenpflichtigen Dienste.
 Bei `TOKEN_NOT_CONFIGURED`: nur fehlende Secret-Namen melden und auf
 https://github.com/FloCola/Bibliotheken/issues/17 verweisen. Keine Tokens kopieren.
+
+## Branch-Abschluss
+
+**Jede Arbeit hat Issue, kurzlebigen Branch und PR; nach geprüftem Merge den unveränderten, ungeschützten Arbeitsbranch ohne offene Folge-PRs entfernen, sonst Owner und nächste Aktion im Issue festhalten.**
+
+Default-, Release-, Rescue-, Archiv- und Schutzbranches niemals allein aufgrund dieser Regel löschen. Vor Löschung Merge-/PR-Zuordnung, aktuellen Head, offene Folge-PRs und Schutzstatus erneut prüfen.
+
