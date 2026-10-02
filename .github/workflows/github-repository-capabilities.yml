@@ -1,14 +1,17 @@
 name: Repository GitHub capability probe
+
 on:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Probe repository-scoped Fine-Grained PAT
+      - name: Probe repository-scoped PAT, Discussions and Wiki
         env:
           GH_REPO_TOKEN: ${{ secrets.GH_REPO_TOKEN }}
           GH_REPO_ACC: ${{ secrets.GH_REPO_ACC }}
@@ -17,28 +20,110 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import json, os, urllib.error, urllib.request
-          token=os.environ.get("GH_REPO_TOKEN",""); expected=os.environ.get("GH_REPO_ACC",""); target=os.environ["TARGET_REPOSITORY"]
-          if not token or not expected: print(json.dumps({"status":"TOKEN_NOT_CONFIGURED"})); raise SystemExit(1)
-          def call(method,url,payload=None):
+          import json, os, shutil, subprocess, sys, tempfile, urllib.error, urllib.request
+          from pathlib import Path
+
+          token=os.environ.get("GH_REPO_TOKEN","")
+          expected=os.environ.get("GH_REPO_ACC","")
+          target=os.environ["TARGET_REPOSITORY"]
+          if not token:
+              print(json.dumps({"status":"TOKEN_NOT_CONFIGURED"}))
+              raise SystemExit(1)
+
+          def api(method,url,payload=None):
               data=None if payload is None else json.dumps(payload).encode()
-              req=urllib.request.Request(url,data=data,method=method,headers={"Authorization":"Bearer "+token,"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28","User-Agent":"FloCola-repository-capability/1","Content-Type":"application/json"})
+              req=urllib.request.Request(url,data=data,method=method,headers={
+                  "Authorization":"Bearer "+token,
+                  "Accept":"application/vnd.github+json",
+                  "X-GitHub-Api-Version":"2022-11-28",
+                  "User-Agent":"FloCola-repository-capability/2",
+                  "Content-Type":"application/json",
+              })
               try:
                   with urllib.request.urlopen(req,timeout=20) as response:
                       raw=response.read(1048577)
                       if len(raw)>1048576: raise RuntimeError("RESPONSE_LIMIT")
                       return response.status,json.loads(raw) if raw else None
-              except urllib.error.HTTPError as exc: return exc.code,None
-          code,user=call("GET","https://api.github.com/user")
-          if code!=200 or not user: print(json.dumps({"status":"TOKEN_AUTH_FAILED","http":code})); raise SystemExit(1)
-          if user.get("login","").casefold()!="flocola" or expected.casefold()!="flocola": print(json.dumps({"status":"ACCOUNT_MISMATCH"})); raise SystemExit(1)
-          code,repo=call("GET","https://api.github.com/repos/"+target)
-          if code!=200 or not repo: print(json.dumps({"status":"REPOSITORY_ACCESS_FAILED","http":code})); raise SystemExit(1)
-          if repo.get("full_name")!=target: print(json.dumps({"status":"REPOSITORY_BINDING_FAILED"})); raise SystemExit(1)
-          owner,name=target.split("/",1); q="""query($owner:String!,$name:String!){repository(owner:$owner,name:$name){hasDiscussionsEnabled viewerPermission}}"""
-          code,graph=call("POST","https://api.github.com/graphql",{"query":q,"variables":{"owner":owner,"name":name}})
+              except urllib.error.HTTPError as exc:
+                  return exc.code,None
+
+          code,user=api("GET","https://api.github.com/user")
+          if code!=200 or not user:
+              print(json.dumps({"status":"TOKEN_AUTH_FAILED","http":code}))
+              raise SystemExit(1)
+          login=user.get("login","")
+          if login.casefold()!="flocola":
+              print(json.dumps({"status":"TOKEN_OWNER_MISMATCH"}))
+              raise SystemExit(1)
+
+          code,repo=api("GET","https://api.github.com/repos/"+target)
+          if code!=200 or not repo or repo.get("full_name")!=target:
+              print(json.dumps({"status":"REPOSITORY_ACCESS_FAILED","http":code}))
+              raise SystemExit(1)
+
+          owner,name=target.split("/",1)
+          q="""query($owner:String!,$name:String!){repository(owner:$owner,name:$name){hasDiscussionsEnabled viewerPermission}}"""
+          code,graph=api("POST","https://api.github.com/graphql",{"query":q,"variables":{"owner":owner,"name":name}})
           discussions="UNKNOWN"
-          if code==200 and graph and not graph.get("errors"): discussions="PASS" if graph["data"]["repository"]["hasDiscussionsEnabled"] else "DISABLED"
-          p=repo.get("permissions") or {}
-          print(json.dumps({"status":"READY","repository":target,"identity":"FloCola","repository_permissions":{k:bool(p.get(k)) for k in ("admin","maintain","push","triage","pull")},"discussions":discussions,"destructive_write_probe":"NOT_RUN","wiki_write":"NOT_ASSUMED"},indent=2))
+          if code==200 and graph and not graph.get("errors"):
+              node=graph["data"]["repository"]
+              discussions="READ_VERIFIED" if node["hasDiscussionsEnabled"] else "DISABLED"
+
+          wiki="DISABLED" if not repo.get("has_wiki") else "UNKNOWN"
+          if repo.get("has_wiki"):
+              git=shutil.which("git")
+              if not git:
+                  wiki="GIT_NOT_FOUND"
+              else:
+                  with tempfile.TemporaryDirectory(prefix="repo-wiki-probe-") as td:
+                      ask=Path(td)/"askpass.py"
+                      ask.write_text(
+                          "#!"+sys.executable+"\n"
+                          "import os,sys\n"
+                          "p=sys.argv[1]\n"
+                          "if 'github.com' not in p: sys.exit(1)\n"
+                          "if p.startswith('Username'): print(os.environ['WIKI_LOGIN'])\n"
+                          "elif p.startswith('Password'): print(os.environ['WIKI_TOKEN'])\n"
+                          "else: sys.exit(1)\n"
+                      )
+                      ask.chmod(0o700)
+                      env={
+                          "PATH":os.defpath,"HOME":td,"XDG_CONFIG_HOME":td,
+                          "GIT_CONFIG_NOSYSTEM":"1","GIT_CONFIG_GLOBAL":os.devnull,
+                          "GIT_TERMINAL_PROMPT":"0","GIT_ASKPASS":str(ask),
+                          "WIKI_LOGIN":login,"WIKI_TOKEN":token,"LC_ALL":"C",
+                      }
+                      remote=f"https://github.com/{target}.wiki.git"
+                      p=subprocess.run(
+                          [git,"-c","credential.helper=","-c","http.followRedirects=false",
+                           "ls-remote","--symref",remote,"HEAD"],
+                          cwd=td,env=env,capture_output=True,timeout=30,check=False
+                      )
+                      if p.returncode==0:
+                          out=(p.stdout or b"").decode("utf-8","replace")
+                          wiki="WIKI_GIT_READ_VERIFIED" if "ref: refs/heads/" in out else "WIKI_INITIALIZATION_REQUIRED"
+                      else:
+                          err=(p.stderr or b"").decode("utf-8","replace").casefold()
+                          if "repository not found" in err:
+                              wiki="WIKI_INITIALIZATION_REQUIRED"
+                          elif "authentication failed" in err or "invalid username or password" in err:
+                              wiki="WIKI_AUTHENTICATION_FAILED"
+                          elif "permission denied" in err:
+                              wiki="WIKI_PERMISSION_DENIED"
+                          else:
+                              wiki="WIKI_GIT_REJECTED"
+
+          result={
+              "status":"READ_PROBE_PASS",
+              "repository":target,
+              "identity":"FloCola",
+              "account_secret_match":None if not expected else expected.casefold()==login.casefold(),
+              "discussions":discussions,
+              "wiki":wiki,
+              "writes":"NOT_TESTED",
+              "exclusive_repo_scope":"POLICY_NOT_PROVEN_BY_THIS_PROBE",
+          }
+          print(json.dumps(result,indent=2))
+          if wiki in {"WIKI_AUTHENTICATION_FAILED","WIKI_PERMISSION_DENIED","WIKI_GIT_REJECTED"}:
+              raise SystemExit(1)
           PY
