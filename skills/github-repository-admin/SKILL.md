@@ -25,3 +25,7 @@ https://github.com/FloCola/Bibliotheken/issues/17 verweisen. Keine Tokens kopier
 
 Default-, Release-, Rescue-, Archiv- und Schutzbranches niemals allein aufgrund dieser Regel löschen. Vor Löschung Merge-/PR-Zuordnung, aktuellen Head, offene Folge-PRs und Schutzstatus erneut prüfen.
 
+## Infrastruktur-Grenze
+
+Deployments ab Installation/Rollout, Remotezugriffe, VPN, SSH, RDP, Zugriffs-Keys/Secrets, Hostdokumentation, Runnerbetrieb/-registrierung und Live-Abfragen von Hosts/Diensten gehören ausschließlich nach `FloCola/Infrastruktur`. Produkt-/Library-Repos liefern Source/Build/Pakete/Releases; CI darf freigegebene Runnerlabels verwenden, verwaltet die Runner aber nicht. Für Betrieb/Zugriff auf Infrastruktur verweisen und keine parallelen Betriebsstrukturen aufbauen.
+
