@@ -5,7 +5,8 @@ compatibility: FloCola-Repositories mit GH_REPO_TOKEN und GH_REPO_ACC sowie GitH
 metadata:
   owner: FloCola
   central-contract: https://github.com/FloCola/Bibliotheken/blob/main/governance/GITHUB-REPOSITORY-ACCESS.md
-  version: "1"
+  version: "4"
+  contract-revision: "github-access-v4"
 ---
 # Repository-GitHub-Zugang
 Connector bevorzugen, wenn er reicht. Zusätzliche Repo-Funktionen über den eigenen Actions-Weg.
